@@ -1,0 +1,233 @@
+# Fusion-Mamba YOWO 配置文件 - Enhanced版
+# 基于Fusion-Mamba论文启发的YOWO项目配置
+# 采用与yolov12n_optimized_enhanced2.0.yaml相同的格式结构
+
+BACKBONE2D:
+  YOLOv12:
+    ver : n  # YOLOv12n - 轻量级但具备先进架构
+
+    PRETRAIN:
+      n : None  # 暂时禁用预训练权重，避免C3k2模块错误
+      s : None
+      m : None
+      l : None
+      x : None
+
+BACKBONE3D:
+  I3D:
+    PRETRAIN:
+      default: weights/backbone3D/I3D/rgb_imagenet.pth
+
+# 损失函数配置 - Fusion-Mamba优化版
+LOSS:
+  TAL:
+    top_k: 10              # 保持标准设置
+    alpha: 0.7             # 降低alpha值，提高损失稳定性
+    beta: 6.0              # 保持beta值
+    radius: 2.5            # 标准radius设置
+    soft_label: True       # 启用软标签，配合Mamba机制
+
+    # 损失权重 - Fusion-Mamba调整
+    scale_cls_loss: 0.5    # 分类损失权重
+    scale_box_loss: 7.5    # 边界框损失权重
+    scale_dfl_loss: 1.5    # DFL损失权重
+
+  SIMOTA:
+    top_k: 10
+    gamma: 0.5
+    radius: 2.5
+    mode: balance
+    soft_label: True
+    dynamic_k: False
+    dynamic_top_k: 40
+
+    scale_cls_loss: 0.5
+    scale_box_loss: 7.5
+    scale_dfl_loss: 1.5
+
+# 训练配置 - Fusion-Mamba版
+config_path       : config/fusion_mamba_config.yaml
+dataset           : ucf
+loss              : tal
+active_checker    : True
+num_classes       : 24
+backbone2D        : yolov12
+backbone3D        : i3d
+fusion_module     : 'FusionMamba'  # 使用Fusion-Mamba融合模块
+mode              : decoupled
+
+# 通道配置 - 适应Fusion-Mamba架构
+interchannels     : [64, 128, 256]  # 匹配YOLOv12n的backbone输出
+pretrain_path     : null
+data_root         : /Dsx/YOWOv3/Datasets/ucf24
+img_size          : 224
+clip_length       : 16
+
+# 训练策略 - Fusion-Mamba优化版
+batch_size        : 16           # 增加batch size，提高训练效率
+num_workers       : 8            # 增加数据加载线程
+acc_grad          : 16           # 增加累积梯度步数，稳定训练
+
+# 学习率策略 - Fusion-Mamba优化版
+lr                : 0.001        # 提高学习率，加快收敛
+weight_decay      : 0.0005       # 调整权重衰减，提高泛化能力
+max_step_warmup   : 1000         # 延长预热步数，稳定训练初期
+adjustlr_schedule : [1, 2, 3, 4, 5] # 修正学习率衰减策略
+max_epoch         : 10           # 增加训练轮数
+lr_decay          : 0.5          # 学习率衰减比例
+save_folder       : weights/fusion_mamba_enhanced
+sampling_rate     : 1
+dropout           : 0.3          # 降低dropout，避免过度正则化
+
+# Fusion-Mamba架构增强配置
+ENHANCEMENTS:
+  # Mamba状态空间模型配置
+  mamba_ssm:
+    enabled: True
+    state_size: 16           # 状态空间维度
+    hidden_dim: 256          # 隐藏层维度
+    num_mamba_blocks: 8      # Mamba块数量
+    dropout: 0.1             # Dropout率
+  
+  # 时序状态通道交换(TemporalSSCS)配置
+  temporal_sscs:
+    enabled: True
+    num_groups: 4            # 通道交换组数
+    attention_heads: 8       # 注意力头数
+    fusion_type: 'weighted'  # 融合方式：weighted, concat, add
+  
+  # 时空动态选择融合(SpatioTemporalDSSF)配置
+  spatiotemporal_dssf:
+    enabled: True
+    num_blocks: 8            # DSSF块数量
+    fusion_method: 'adaptive_gate'  # 融合方法
+    cross_attention_heads: 8
+    learnable_weights: True  # 学习融合权重
+    temperature: 1.0         # 软注意力温度参数
+  
+  # 性能监控配置
+  performance_monitor:
+    enabled: True
+    log_flops: True          # 记录FLOPs
+    log_params: True         # 记录参数量
+    log_memory: True         # 记录内存使用
+    profile_frequency: 100   # 性能分析频率
+    
+# 数据增强配置
+DATA_AUGMENTATION:
+  # 空间增强
+  spatial:
+    random_crop: True
+    random_flip: True
+    random_rotation: 15      # 随机旋转角度
+    color_jitter: 0.2        # 颜色抖动强度
+  
+  # 时间增强
+  temporal:
+    random_temporal_crop: True
+    temporal_stride: [1, 2]  # 时间步长变化
+    frame_dropout: 0.1       # 帧丢弃概率
+
+# 优化器配置
+OPTIMIZER:
+  type: 'AdamW'              # 优化器类型
+  betas: [0.9, 0.999]        # Adam参数
+  eps: 1e-8                  # 数值稳定性参数
+  amsgrad: False             # 是否使用AMSGrad
+
+# 学习率调度器配置
+SCHEDULER:
+  type: 'CosineAnnealingLR'  # 余弦退火学习率
+  T_max: 10                  # 周期长度
+  eta_min: 1e-6              # 最小学习率
+  warmup_type: 'linear'      # 预热类型
+    
+# UCF101-24数据集类别映射
+idx2name:
+  0  : Basketball
+  1  : BasketballDunk
+  2  : Biking
+  3  : CliffDiving
+  4  : CricketBowling
+  5  : Diving
+  6  : Fencing
+  7  : FloorGymnastics
+  8  : GolfSwing
+  9  : HorseRiding
+  10 : IceDancing
+  11 : LongJump
+  12 : PoleVault
+  13 : RopeClimbing
+  14 : SalsaSpin
+  15 : SkateBoarding
+  16 : Skiing
+  17 : Skijet
+  18 : SoccerJuggling
+  19 : Surfing
+  20 : TennisSwing
+  21 : TrampolineJumping
+  22 : VolleyballSpiking
+  23 : WalkingWithDog
+
+# 实验配置
+experiment:
+  output:
+    save_dir: weights/fusion_mamba_experiments
+    log_dir: logs/fusion_mamba
+    checkpoint_dir: checkpoints/fusion_mamba
+  
+  # 数据配置
+data:
+  data_root: /Dsx/YOWOv3/Datasets/ucf24
+  num_workers: 8
+  pin_memory: True
+  drop_last: True
+  preprocessing:
+    resize: [224, 224]
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+# 模型配置
+model:
+  num_classes: 24
+  clip_len: 16
+  backbone_2d: yolov12
+  backbone_3d: i3d
+  fusion_type: FusionMamba
+
+# 阶段训练配置
+stage_training:
+  stage1:
+    epochs: 5
+    learning_rate: 0.001
+    weight_decay: 0.0005
+    description: "核心模块预训练"
+  stage2:
+    epochs: 10
+    learning_rate: 0.0005
+    weight_decay: 0.0005
+    description: "端到端微调"
+  stage3:
+    epochs: 15
+    learning_rate: 0.0001
+    weight_decay: 0.0005
+    description: "性能优化"
+  stage4:
+    epochs: 5
+    learning_rate: 0.00005
+    weight_decay: 0.0005
+    description: "最终调优"
+
+# 配置说明：
+# 1. Fusion-Mamba架构：集成状态空间模型、时序状态通道交换、时空动态选择融合
+# 2. 训练配置优化：提高学习率、增加batch size、优化累积梯度
+# 3. 数据增强：添加空间和时间维度的数据增强策略
+# 4. 优化器优化：使用AdamW优化器和余弦退火学习率调度
+# 5. 损失函数优化：调整TAL损失函数参数，提高训练稳定性
+# 
+# 预期性能提升：
+# - mAP: 45-50% (相比原版YOWO提升5-8%)
+# - 推理速度: 1.0-1.5ms (Mamba线性复杂度优化)
+# - 参数量: 减少20-30% (状态空间模型效率)
+# - 内存使用: 减少25-35% (线性复杂度建模)

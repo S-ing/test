@@ -1,0 +1,217 @@
+# Ablation Study: FCM Position - P5 Only
+# This configuration tests FCM effectiveness at P5 position only
+# Target: Evaluate P5 position contribution to overall performance
+
+BACKBONE2D:
+  YOLOv8:
+    ver : n
+
+    PRETRAIN:
+      n : weights/backbone2D/YOLOv8/v8_n.pth
+      s : weights/backbone2D/YOLOv8/v8_s.pth
+      m : weights/backbone2D/YOLOv8/v8_m.pth
+      l : weights/backbone2D/YOLOv8/v8_l.pth
+      x : weights/backbone2D/YOLOv8/v8_x.pth
+
+    # FCM Configuration - P5 ONLY
+    FCM:
+      enable: true
+      positions: ['p5']  # Only P5 position
+      fpn_positions: ['h2', 'h4', 'h6']  # Keep all FPN positions
+      types:
+        p5: 'FCM_3'  # Use FCM_3 for P5 level only
+
+BACKBONE3D:
+
+  MOBILENET:
+    width_mult: 2.0
+
+    PRETRAIN:
+      width_mult_0.5x  : weights/backbone3D/mobilenet/kinetics_mobilenet_0.5x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/mobilenet/kinetics_mobilenet_1.0x_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/mobilenet/kinetics_mobilenet_1.5x_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/mobilenet/kinetics_mobilenet_2.0x_RGB_16_best.pth
+
+  MOBILENETv2:
+    width_mult: 1.0
+
+    PRETRAIN:
+      width_mult_0.2x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.2x_RGB_16_best.pth
+      width_mult_0.45x : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.45x_RGB_16_best.pth
+      width_mult_0.7x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.7x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_1.0x_RGB_16_best.pth
+
+  SHUFFLENET:
+    width_mult: 2.0
+
+    PRETRAIN:
+      width_mult_0.5x  : weights/backbone3D/shufflenet/kinetics_shufflenet_0.5x_G3_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/shufflenet/kinetics_shufflenet_1.0x_G3_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/shufflenet/kinetics_shufflenet_1.5x_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/shufflenet/kinetics_shufflenet_2.0x_RGB_16_best.pth
+
+  SHUFFLENETv2:
+    width_mult: 2.0
+
+    PRETRAIN:
+      width_mult_0.25x : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_0.25x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_1.0x_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_1.5x_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_2.0x_RGB_16_best.pth
+      
+  I3D:
+    PRETRAIN:
+      default: weights/backbone3D/I3D/rgb_imagenet.pth
+  
+  RESNET:
+    ver : 101
+
+    PRETRAIN:
+      ver_18 : weights/backbone3D/resnet/kinetics_resnet_18_RGB_16_best.pth
+      ver_50 : weights/backbone3D/resnet/kinetics_resnet_50_RGB_16_best.pth
+      ver_101: weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth
+
+  RESNEXT:
+    ver : 101
+
+    PRETRAIN:
+      ver_101 : weights/backbone3D/resnext/resnext-101-kinetics.pth
+
+# 🔬 实验5核心组合: 最优损失权重 + Attention融合
+LOSS:
+  TAL:
+    top_k  : 10
+    alpha  : 0.7
+    beta   : 6.0
+    radius : 2.5
+    soft_label : False  # 保持基线最优设置
+
+    # 🎯 采用exp2_loss_weights_v2的最优损失权重配置
+    scale_cls_loss : 1.5   # 强化分类损失 (v2最优)
+    scale_box_loss : 5.0   # 适度边框损失 (v2最优)
+    scale_dfl_loss : 1.0   # 轻量DFL损失 (v2最优)
+
+  SIMOTA:
+    top_k  : 10
+    gamma  : 0.5
+    radius : 2.5
+    mode   : balance
+    soft_label : False
+
+    dynamic_k     : False
+    dynamic_top_k : 40
+
+    scale_cls_loss : 0.5
+    scale_box_loss : 7.5
+    scale_dfl_loss : 1.5
+
+# Training configuration - P5 only FCM
+config_path       : config/fcm/ucf_ablation_fcm_p5_only.yaml
+dataset           : ucf
+loss              : tal
+active_checker    : True
+num_classes       : 24
+backbone2D        : yolov8_fcm  # Use FCM-enhanced YOLOv8
+backbone3D        : i3d
+fusion_module     : EnhancedCFAM  # 采用exp4_fusion_attention的最优融合策略
+mode              : decoupled
+
+# interchannels     : [256, 256, 256]
+interchannels     : [64, 128, 256]
+pretrain_path     : weights/ucf_ablation_fcm_p5_only_0924max/ema_epoch_7.pth
+data_root         : /Xsb/YOWOv4/ucf24
+img_size          : 224
+clip_length       : 16
+
+batch_size        : 16
+num_workers       : 8
+acc_grad          : 16
+
+lr                : 0.001
+weight_decay      : 0.0005
+max_step_warmup   : 500
+adjustlr_schedule : [1, 2, 3, 4, 5]
+max_epoch         : 7
+lr_decay          : 0.5
+save_folder       : weights/ucf_ablation_fcm_p5_only_0924max
+sampling_rate     : 1
+dropout           : 0.3          # 降低dropout，避免过度正则化
+
+
+# 架构增强配置
+ENHANCEMENTS:
+  # 多尺度注意力配置
+  multi_scale_attention:
+    enabled: True
+    scales: [1, 2, 4]        # 多尺度因子
+    fusion_type: 'weighted'   # 融合方式：weighted, concat, add
+  
+  # 动态融合配置
+  dynamic_fusion:
+    enabled: True
+    learnable_weights: True   # 学习融合权重
+    temperature: 1.0         # 软注意力温度参数
+  
+  # 性能监控配置
+  performance_monitor:
+    enabled: True
+    log_flops: True          # 记录FLOPs
+    log_params: True         # 记录参数量
+    log_memory: True         # 记录内存使用
+    profile_frequency: 100   # 性能分析频率
+
+# 数据增强配置
+DATA_AUGMENTATION:
+  # 空间增强
+  spatial:
+    random_crop: True
+    random_flip: True
+    random_rotation: 15      # 随机旋转角度
+    color_jitter: 0.2        # 颜色抖动强度
+  
+  # 时间增强
+  temporal:
+    random_temporal_crop: True
+    temporal_stride: [1, 2]  # 时间步长变化
+    frame_dropout: 0.1       # 帧丢弃概率
+
+# 优化器配置
+OPTIMIZER:
+  type: 'AdamW'              # 优化器类型
+  betas: [0.9, 0.999]        # Adam参数
+  eps: 1e-8                  # 数值稳定性参数
+  amsgrad: False             # 是否使用AMSGrad
+
+# 学习率调度器配置
+SCHEDULER:
+  type: 'CosineAnnealingLR'  # 余弦退火学习率
+  T_max: 10                  # 周期长度
+  eta_min: 1e-6              # 最小学习率
+  warmup_type: 'linear'      # 预热类型
+  
+# UCF24 dataset class mapping - consistent with baseline
+idx2name:
+  0  : Baseketball
+  1  : BaseketballDunk
+  2  : Biking
+  3  : CliffDiving
+  4  : CricketBowling
+  5  : Diving
+  6  : Fencing
+  7  : FloorGymnastics
+  8  : GolfSwing
+  9  : HorseRiding
+  10 : IceDancing
+  11 : LongJump
+  12 : PoleVault
+  13 : RopeClimbing
+  14 : SalsaSpin
+  15 : SkateBoarding
+  16 : Skiing
+  17 : Skijet  
+  18 : Soccer Juggling
+  19 : Surfing
+  20 : TennisSwing
+  21 : TrampolineJumping
+  22 : VolleyballSpiking
+  23 : WalkingWithDog

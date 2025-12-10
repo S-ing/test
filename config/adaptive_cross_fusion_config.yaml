@@ -1,0 +1,192 @@
+# AdaptiveCrossFusion架构配置 - 基于1.yaml的优化版
+# 针对85% mAP配置的性能瓶颈优化，预期mAP提升至88%+
+# 主要优化：充分训练策略 + 增强数据增强 + 优化正则化
+
+BACKBONE2D:
+  YOLOv12:
+    ver: n  # YOLOv12n - 轻量级但具备先进架构
+
+    PRETRAIN:
+      n: None  # 暂时禁用预训练权重，避免C3k2模块错误
+      s: None
+      m: None
+      l: None
+      x: None
+
+BACKBONE3D:
+  I3D:
+    PRETRAIN:
+      default: weights/backbone3D/I3D/rgb_imagenet.pth
+
+# 损失函数配置 - 保持成功的平衡策略
+LOSS:
+  TAL:
+    top_k: 10              # 保持适中的top_k设置
+    alpha: 0.5             # 保持较低的alpha值
+    beta: 6.0              # 保持标准beta值
+    radius: 2.5            # 保持标准radius设置
+    soft_label: True       # 启用软标签，配合注意力机制
+    eps: 1e-9              # 数值稳定性
+    roll_out_thr: 64       # 展开阈值
+
+    # 损失权重 - 保持成功的平衡配置
+    scale_cls_loss: 0.5    # 适中的分类损失权重
+    scale_box_loss: 7.5    # 适中的边界框损失权重
+    scale_dfl_loss: 1.5    # 适中的DFL损失权重
+
+  SIMOTA:
+    top_k: 10
+    gamma: 0.5
+    radius: 2.5
+    mode: balance
+    soft_label: True
+    dynamic_k: True        # 保持动态k策略
+    dynamic_top_k: 40
+    eps: 1e-9
+    roll_out_thr: 64
+
+    scale_cls_loss: 0.5
+    scale_box_loss: 7.5
+    scale_dfl_loss: 1.5
+
+# 训练配置 - AdaptiveCrossFusion优化版
+config_path       : config/adaptive_cross_fusion_config.yaml
+dataset           : ucf
+loss              : tal
+active_checker    : True
+num_classes       : 24
+backbone2D        : yolov12
+backbone3D        : i3d
+fusion_module     : 'EnhancedCFAM'  # 使用AdaptiveCrossFusion模块
+mode              : decoupled
+
+# 通道配置 - 适应YOLOv12n + AdaptiveCrossFusion
+interchannels     : [64, 128, 256]  # 匹配YOLOv12n的backbone输出
+pretrain_path     : weights/adaptive_cross_fusion0810/ema_epoch_10.pth
+data_root         : Datasets/ucf24
+img_size          : 224
+clip_length       : 16
+
+# 训练策略 - 充分训练优化版
+batch_size        : 16           # 增加batch size，提高训练效率和梯度稳定性
+num_workers       : 8            # 增加数据加载线程
+acc_grad          : 16           # 保持累积梯度步数
+
+# 学习率策略 - 充分训练优化版
+lr                : 0.001        # 提升学习率至标准水平，加速收敛
+weight_decay      : 0.0005       # 保持适中的权重衰减
+max_step_warmup   : 1000         # 增加预热步数，提高训练稳定性
+adjustlr_schedule : [1, 2, 3, 4, 5] # 标准学习率衰减策略
+max_epoch         : 10           # 增加训练轮数，充分学习
+lr_decay          : 0.5          # 保持适中的学习率衰减
+save_folder       : weights/adaptive_cross_fusion0810
+sampling_rate     : 1
+dropout           : 0.3          # 增加dropout，提高泛化能力
+
+# 架构增强配置 - 保持成功的注意力机制
+ENHANCEMENTS:
+  # CSAM通道注意力配置 - 保持原有成功配置
+  channel_attention:
+    enabled: True
+    reduction_ratio: 12      # 保持较低的降维比例
+    activation: 'swish'      # 保持高效的激活函数
+    scales: [1, 2, 4, 8]     # 保持4个尺度因子
+    fusion_type: 'weighted'   # 融合方式：weighted, concat, add
+  
+  # SSAM空间注意力配置 - 保持原有成功配置
+  spatial_attention:
+    enabled: True
+    kernel_size: 9           # 保持较大的卷积核
+    activation: 'sigmoid'    # 注意力激活函数
+    scales: [1, 2, 4, 8]     # 保持4个尺度因子
+  
+  # 自适应融合权重配置 - 保持原有成功配置
+  adaptive_fusion:
+    enabled: True
+    learnable_weights: True  # 学习融合权重
+    temperature: 0.8         # 保持较低的温度参数
+    dropout_rate: 0.1        # 适度增加融合层dropout
+  
+  # 性能监控配置
+  performance_monitor:
+    enabled: True
+    log_flops: True          # 记录FLOPs
+    log_params: True         # 记录参数量
+    log_memory: True         # 记录内存使用
+    log_attention_weights: True  # 记录注意力权重
+    log_fusion_stats: True       # 记录融合统计信息
+    profile_frequency: 100       # 性能分析频率
+
+# 数据增强配置 - 增强泛化能力
+DATA_AUGMENTATION:
+  # 空间增强 - 适中策略（从保守提升到适中）
+  spatial:
+    random_crop: True
+    random_flip: True
+    random_rotation: 15      # 增加旋转角度，提升空间泛化
+    color_jitter: 0.2        # 增加颜色抖动，提升光照适应性
+  
+  # 时间增强 - 适中策略（从保守提升到适中）
+  temporal:
+    random_temporal_crop: True
+    temporal_stride: [1, 2]  # 时间步长变化
+    frame_dropout: 0.1       # 增加帧丢弃概率，提升时序鲁棒性
+
+# 优化器配置 - 保持标准配置
+OPTIMIZER:
+  type: 'AdamW'              # 优化器类型
+  betas: [0.9, 0.999]        # Adam参数
+  eps: 1e-8                  # 数值稳定性参数
+  amsgrad: False             # 是否使用AMSGrad
+  attention_lr_scale: 1.0    # 注意力层学习率缩放
+
+# 学习率调度器配置
+SCHEDULER:
+  type: 'CosineAnnealingLR'  # 余弦退火学习率
+  T_max: 10                  # 周期长度
+  eta_min: 1e-6              # 最小学习率
+  warmup_type: 'linear'      # 预热类型
+  warmup_attention: True     # 注意力层预热
+
+# UCF101-24数据集类别映射
+idx2name:
+  0  : Basketball
+  1  : BasketballDunk
+  2  : Biking
+  3  : CliffDiving
+  4  : CricketBowling
+  5  : Diving
+  6  : Fencing
+  7  : FloorGymnastics
+  8  : GolfSwing
+  9  : HorseRiding
+  10 : IceDancing
+  11 : LongJump
+  12 : PoleVault
+  13 : RopeClimbing
+  14 : SalsaSpin
+  15 : SkateBoarding
+  16 : Skiing
+  17 : Skijet
+  18 : SoccerJuggling
+  19 : Surfing
+  20 : TennisSwing
+  21 : TrampolineJumping
+  22 : VolleyballSpiking
+  23 : WalkingWithDog
+
+# 优化配置说明：
+# 1. 训练强度优化：学习率提升至0.001，batch_size增至16，训练轮数增至10
+# 2. 训练稳定性优化：预热步数增至1000，保持标准学习率衰减策略
+# 3. 数据增强增强：旋转角度增至15°，颜色抖动增至0.2，帧丢弃增至0.1
+# 4. 正则化优化：dropout增至0.3，融合层dropout适度增加至0.1
+# 5. 保持成功因素：平衡的损失权重策略，有效的注意力机制配置
+# 6. 充分训练保证：通过提升学习率和增加训练轮数确保充分收敛
+# 
+# 预期性能目标：
+# - mAP: 88%+ (从85%提升至88%+，提升幅度3.5%)
+# - 训练稳定性: 通过增加预热步数和batch_size显著提升
+# - 泛化能力: 通过增强数据增强和适度正则化大幅提升
+# - 收敛效果: 通过提升学习率和充分训练轮数确保最优收敛
+# - 特征融合质量: 保持原有成功的注意力机制配置
+# - 整体平衡性: 在保持成功因素基础上针对性优化瓶颈
